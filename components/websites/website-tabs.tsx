@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface Website {
   id: string
@@ -30,6 +31,12 @@ interface Website {
   firewallRules: {
     id: string
     pattern: string
+  }[]
+  origins: {
+    id: string
+    host: string
+    protocol: string
+    port: number | null
   }[]
 }
 
@@ -81,6 +88,21 @@ const firewallFormSchema = z.object({
   ),
 })
 
+const originsFormSchema = z.object({
+  origins: z.array(
+    z.object({
+      id: z.string().optional(),
+      host: z.string().min(1, {
+        message: "Host is required.",
+      }),
+      protocol: z.enum(["http", "https"]),
+      port: z.number().nullable(),
+    })
+  ).min(1, {
+    message: "At least one origin is required.",
+  }),
+})
+
 export function WebsiteTabs({ website }: WebsiteTabsProps) {
   const router = useRouter()
   const { toast } = useToast()
@@ -88,6 +110,7 @@ export function WebsiteTabs({ website }: WebsiteTabsProps) {
   const [isDomainsLoading, setIsDomainsLoading] = useState(false)
   const [isWaytectLoading, setIsWaytectLoading] = useState(false)
   const [isFirewallLoading, setIsFirewallLoading] = useState(false)
+  const [isOriginsLoading, setIsOriginsLoading] = useState(false)
 
   const generalForm = useForm<z.infer<typeof generalFormSchema>>({
     resolver: zodResolver(generalFormSchema),
@@ -125,6 +148,20 @@ export function WebsiteTabs({ website }: WebsiteTabsProps) {
     },
   })
 
+  const originsForm = useForm<z.infer<typeof originsFormSchema>>({
+    resolver: zodResolver(originsFormSchema),
+    defaultValues: {
+      origins: website.origins.length > 0
+        ? website.origins.map((origin) => ({
+            id: origin.id,
+            host: origin.host,
+            protocol: origin.protocol,
+            port: origin.port,
+          }))
+        : [{ host: "", protocol: "https", port: null }],
+    },
+  })
+
   const {
     fields: domainFields,
     append: appendDomain,
@@ -150,6 +187,15 @@ export function WebsiteTabs({ website }: WebsiteTabsProps) {
   } = useFieldArray({
     control: firewallForm.control,
     name: "firewallRules",
+  })
+
+  const {
+    fields: originFields,
+    append: appendOrigin,
+    remove: removeOrigin,
+  } = useFieldArray({
+    control: originsForm.control,
+    name: "origins",
   })
 
   async function onGeneralSubmit(values: z.infer<typeof generalFormSchema>) {
@@ -272,11 +318,41 @@ export function WebsiteTabs({ website }: WebsiteTabsProps) {
     router.refresh()
   }
 
+  async function onOriginsSubmit(values: z.infer<typeof originsFormSchema>) {
+    setIsOriginsLoading(true)
+
+    const response = await fetch(`/api/websites/${website.id}/origins`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(values),
+    })
+
+    setIsOriginsLoading(false)
+
+    if (!response.ok) {
+      return toast({
+        title: "Something went wrong.",
+        description: "Your origin settings could not be updated. Please try again.",
+        variant: "destructive",
+      })
+    }
+
+    toast({
+      title: "Origins updated.",
+      description: "Your origin settings have been updated.",
+    })
+
+    router.refresh()
+  }
+
   return (
     <Tabs defaultValue="general" className="w-full">
-      <TabsList className="grid w-full grid-cols-4">
+      <TabsList className="grid w-full grid-cols-5">
         <TabsTrigger value="general">General</TabsTrigger>
         <TabsTrigger value="domains">Domains</TabsTrigger>
+        <TabsTrigger value="origins">Origins</TabsTrigger>
         <TabsTrigger value="waytect">Waytect</TabsTrigger>
         <TabsTrigger value="firewall">Firewall</TabsTrigger>
       </TabsList>
@@ -354,6 +430,114 @@ export function WebsiteTabs({ website }: WebsiteTabsProps) {
             </div>
             <Button type="submit" disabled={isDomainsLoading}>
               {isDomainsLoading ? "Saving..." : "Save Changes"}
+            </Button>
+          </form>
+        </Form>
+      </TabsContent>
+      <TabsContent value="origins" className="mt-6">
+        <Form {...originsForm}>
+          <form onSubmit={originsForm.handleSubmit(onOriginsSubmit)} className="space-y-8">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <FormLabel>Origins</FormLabel>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => appendOrigin({ host: "", protocol: "https", port: null })}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Origin
+                </Button>
+              </div>
+              <FormDescription>
+                Add origins for your website. Origins can be IP addresses or domain names.
+              </FormDescription>
+
+              {originFields.map((field, index) => (
+                <Card key={field.id}>
+                  <CardContent className="pt-6">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-end gap-4">
+                        <FormField
+                          control={originsForm.control}
+                          name={`origins.${index}.host`}
+                          render={({ field }) => (
+                            <FormItem className="flex-1">
+                              <FormLabel>Host</FormLabel>
+                              <FormControl>
+                                <Input placeholder="example.com or 1.2.3.4" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={originsForm.control}
+                          name={`origins.${index}.protocol`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Protocol</FormLabel>
+                              <Select
+                                value={field.value}
+                                onValueChange={field.onChange}
+                              >
+                                <SelectTrigger className="w-[120px]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="http">HTTP</SelectItem>
+                                  <SelectItem value="https">HTTPS</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={originsForm.control}
+                          name={`origins.${index}.port`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Port (Optional)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="80"
+                                  className="w-[100px]"
+                                  {...field}
+                                  onChange={(e) => {
+                                    const value = e.target.value
+                                    field.onChange(value ? parseInt(value) : null)
+                                  }}
+                                  value={field.value ?? ""}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => {
+                            if (originFields.length > 1) {
+                              removeOrigin(index)
+                            }
+                          }}
+                          disabled={originFields.length <= 1}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <Button type="submit" disabled={isOriginsLoading}>
+              {isOriginsLoading ? "Saving..." : "Save Changes"}
             </Button>
           </form>
         </Form>

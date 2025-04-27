@@ -12,6 +12,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 const formSchema = z.object({
   name: z.string().min(2, {
@@ -28,6 +29,17 @@ const formSchema = z.object({
     .min(1, {
       message: "At least one domain is required.",
     }),
+  origins: z
+    .array(
+      z.object({
+        host: z.string().min(1, {
+          message: "Host is required.",
+        }),
+        protocol: z.enum(["http", "https"]),
+        port: z.number().nullable(),
+      }),
+    )
+    .optional(),
 })
 
 export function NewWebsiteForm() {
@@ -40,12 +52,26 @@ export function NewWebsiteForm() {
     defaultValues: {
       name: "",
       domains: [{ domain: "" }],
+      origins: [{ host: "", protocol: "https", port: null }],
     },
   })
 
-  const { fields, append, remove } = useFieldArray({
+  const { 
+    fields: domainFields, 
+    append: appendDomain, 
+    remove: removeDomain 
+  } = useFieldArray({
     control: form.control,
     name: "domains",
+  })
+
+  const {
+    fields: originFields,
+    append: appendOrigin,
+    remove: removeOrigin,
+  } = useFieldArray({
+    control: form.control,
+    name: "origins",
   })
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
@@ -99,10 +125,11 @@ export function NewWebsiteForm() {
           )}
         />
 
+        {/* Domains Section */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <FormLabel>Domains</FormLabel>
-            <Button type="button" variant="outline" size="sm" onClick={() => append({ domain: "" })}>
+            <Button type="button" variant="outline" size="sm" onClick={() => appendDomain({ domain: "" })}>
               <Plus className="mr-2 h-4 w-4" />
               Add Domain
             </Button>
@@ -111,7 +138,7 @@ export function NewWebsiteForm() {
             Add at least one domain. You&apos;ll need to point these domains to way-cdn.turboer.dev.
           </FormDescription>
 
-          {fields.map((field, index) => (
+          {domainFields.map((field, index) => (
             <Card key={field.id}>
               <CardContent className="pt-6">
                 <div className="flex items-end gap-4">
@@ -132,14 +159,111 @@ export function NewWebsiteForm() {
                     variant="outline"
                     size="icon"
                     onClick={() => {
-                      if (fields.length > 1) {
-                        remove(index)
+                      if (domainFields.length > 1) {
+                        removeDomain(index)
                       }
                     }}
-                    disabled={fields.length <= 1}
+                    disabled={domainFields.length <= 1}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Origins Section */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <FormLabel>Origins</FormLabel>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => appendOrigin({ host: "", protocol: "https", port: null })}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add Origin
+            </Button>
+          </div>
+          <FormDescription>
+            Add origins for your website. Origins can be IP addresses or domain names.
+          </FormDescription>
+
+          {originFields.map((field, index) => (
+            <Card key={field.id}>
+              <CardContent className="pt-6">
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-end gap-4">
+                    <FormField
+                      control={form.control}
+                      name={`origins.${index}.host`}
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormLabel>Host</FormLabel>
+                          <FormControl>
+                            <Input placeholder="example.com or 1.2.3.4" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name={`origins.${index}.protocol`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Protocol</FormLabel>
+                          <Select
+                            value={field.value}
+                            onValueChange={field.onChange}
+                          >
+                            <SelectTrigger className="w-[120px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="http">HTTP</SelectItem>
+                              <SelectItem value="https">HTTPS</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name={`origins.${index}.port`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Port (Optional)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="80"
+                              className="w-[100px]"
+                              {...field}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                field.onChange(value ? parseInt(value) : null)
+                              }}
+                              value={field.value ?? ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => removeOrigin(index)}
+                      disabled={originFields.length <= 1}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

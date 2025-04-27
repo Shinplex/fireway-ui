@@ -14,6 +14,15 @@ const websiteSchema = z.object({
       }),
     )
     .min(1),
+  origins: z
+    .array(
+      z.object({
+        host: z.string().min(1),
+        protocol: z.enum(["http", "https"]),
+        port: z.number().nullable(),
+      }),
+    )
+    .optional(),
 })
 
 export async function POST(req: Request) {
@@ -25,7 +34,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const { name, domains } = websiteSchema.parse(body)
+    const { name, domains, origins } = websiteSchema.parse(body)
 
     // Check if user has reached the limit of 30 websites
     const websiteCount = await db.website.count({
@@ -35,10 +44,13 @@ export async function POST(req: Request) {
     })
 
     if (websiteCount >= 30) {
-      return NextResponse.json({ error: "You have reached the maximum limit of 30 websites." }, { status: 403 })
+      return NextResponse.json(
+        { error: "You have reached the maximum limit of 30 websites." },
+        { status: 403 }
+      )
     }
 
-    // Create the website with domains
+    // Create the website with domains and origins
     const website = await db.website.create({
       data: {
         name,
@@ -48,6 +60,15 @@ export async function POST(req: Request) {
             domain: domain.domain,
           })),
         },
+        origins: origins
+          ? {
+              create: origins.map((origin) => ({
+                host: origin.host,
+                protocol: origin.protocol,
+                port: origin.port,
+              })),
+            }
+          : undefined,
       },
     })
 
@@ -57,6 +78,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.errors }, { status: 400 })
     }
 
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    )
   }
 }

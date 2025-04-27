@@ -70,6 +70,7 @@ model Website {
   domains         Domain[]
   waytectPaths    WaytectPath[]
   firewallRules   FirewallRule[]
+  origins         Origin[]
 }
 
 model Domain {
@@ -103,4 +104,17 @@ model FirewallRule {
   updatedAt DateTime @updatedAt
 
   @@unique([pattern, websiteId])
+}
+
+model Origin {
+  id        String   @id @default(cuid())
+  host      String
+  protocol  String
+  port      Int?
+  websiteId String
+  website   Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([host, websiteId])
 }

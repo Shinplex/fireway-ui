@@ -8,12 +8,13 @@ import { WebsiteTabs } from "@/components/websites/website-tabs"
 import { LoadingZap } from "@/components/loading-zap"
 
 interface WebsitePageProps {
-  params: {
+  params: Promise<{
     websiteId: string
-  }
+  }>
 }
 
 async function WebsiteContent({ params }: WebsitePageProps) {
+  const { websiteId } = await params
   const session = await getServerSession(authOptions)
 
   if (!session) {
@@ -22,13 +23,14 @@ async function WebsiteContent({ params }: WebsitePageProps) {
 
   const website = await db.website.findUnique({
     where: {
-      id: params.websiteId,
+      id: websiteId,
       userId: session.user.id,
     },
     include: {
       domains: true,
       waytectPaths: true,
       firewallRules: true,
+      origins: true,
     },
   })
 
